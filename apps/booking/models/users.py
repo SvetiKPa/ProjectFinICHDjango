@@ -3,6 +3,7 @@ from django.contrib.auth.models import PermissionsMixin, UserManager
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
+from apps.booking.enums import Role
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
@@ -22,14 +23,19 @@ class User(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(_("last name"), max_length=50)
     phone = models.CharField(max_length=45, null=True, blank=True)
     age = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(6), MaxValueValidator(120)],
+        validators=[MinValueValidator(16), MaxValueValidator(120)],
         null=True
     )
-    # role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='LESSEE')
-    role = models.ForeignKey('User', on_delete=models.SET_NULL, null=True)
-
+    is_staff = models.BooleanField(default=False)       # Доступ в админку
+    is_superuser = models.BooleanField(default=False)  # Суперпользователь
+    # role = models.ForeignKey('Role', on_delete=models.SET_NULL, null=True, blank=True)
+    role = models.CharField(
+        max_length=35,
+        choices=Role.choices(),
+        default=Role.LESSEE.value
+    )
     is_active = models.BooleanField(default=True)
-    date_joined = models.DateTimeField(default=timezone.now)
+    # date_joined = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Дата удаления")

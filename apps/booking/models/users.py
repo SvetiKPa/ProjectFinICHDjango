@@ -28,14 +28,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     is_staff = models.BooleanField(default=False)       # Доступ в админку
     is_superuser = models.BooleanField(default=False)  # Суперпользователь
-    # role = models.ForeignKey('Role', on_delete=models.SET_NULL, null=True, blank=True)
     role = models.CharField(
         max_length=35,
         choices=Role.choices(),
         default=Role.LESSEE.value
     )
     is_active = models.BooleanField(default=True)
-    # date_joined = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False, verbose_name="Удалено")
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Дата удаления")

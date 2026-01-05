@@ -3,14 +3,9 @@ from apps.booking.models import Booking
 from apps.booking.enums import BookingStatus
 from django.utils import timezone
 from datetime import timedelta
+from apps.booking.permissions import IsLessee
 # from apps.booking.serializers import CalendarSerializer
 
-# Отсутствуют импорты для timezone, timedelta, CalendarService, BookingService в сериализаторах
-# # CalendarService не импортирован:
-# is_available = CalendarService.check_date_range_availability(...)
-#
-# # BookingService не импортирован:
-# price_data = BookingService.calculate_booking_price(...)
 
 class BookingSerializer(serializers.ModelSerializer):
     """Основной сериализатор для бронирований"""
@@ -128,7 +123,27 @@ class BookingSerializer(serializers.ModelSerializer):
 
 
 class BookingCreateSerializer(serializers.ModelSerializer):
-    """Сериализатор для создания бронирования"""
+    guest_first_name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Обязательно для гостей. Для арендаторов заполняется автоматически"
+    )
+    guest_last_name = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Обязательно для гостей. Для арендаторов заполняется автоматически"
+    )
+    guest_email = serializers.EmailField(
+        required=False,
+        allow_blank=True,
+        help_text="Обязательно для гостей. Для арендаторов заполняется автоматически"
+    )
+    guest_phone = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        help_text="Необязательно"
+    )
 
     class Meta:
         model = Booking
@@ -139,12 +154,80 @@ class BookingCreateSerializer(serializers.ModelSerializer):
             'number_of_guests',
             'guest_first_name',
             'guest_last_name',
+            'guest_email',
+            'guest_phone',
             'guest_notes',
             'guest_phone',
             'special_requests',
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request:
+            is_lessee = IsLessee().has_permission(request, None)
+
+            if is_lessee:
+                # Для арендаторов: поля НЕ обязательные
+                self.fields['guest_first_name'].required = False
+                self.fields['guest_last_name'].required = False
+                self.fields['guest_email'].required = False
+            else:
+                # Для гостей/других пользователей: поля ОБЯЗАТЕЛЬНЫЕ
+                self.fields['guest_first_name'].required = True
+                self.fields['guest_last_name'].required = True
+                self.fields['guest_email'].required = True
+
     def validate(self, data):
+        request = self.context.get('request')
+        if not request:
+            raise serializers.ValidationError("Request context is required")
+
+        is_lessee = IsLessee().has_permission(request, None)
+
+        if is_lessee:
+            # АРЕНДАТОР (LESSER)
+            user = request.user
+
+            # Берем данные из профиля
+            data['guest_first_name'] = user.first_name or ''
+            data['guest_last_name'] = user.last_name or ''
+            data['guest_email'] = user.email or ''
+
+            if not data.get('guest_phone') and hasattr(user, 'phone') and user.phone:
+                data['guest_phone'] = user.phone
+
+            # Проверяем что в профиле есть необходимые данные
+            if not data['guest_first_name']:
+                raise serializers.ValidationError({
+                    'guest_first_name': 'Заполните имя в профиле или укажите в запросе'
+                })
+            if not data['guest_last_name']:
+                raise serializers.ValidationError({
+                    'guest_last_name': 'Заполните фамилию в профиле или укажите в запросе'
+                })
+            if not data['guest_email']:
+                raise serializers.ValidationError({
+                    'guest_email': 'Заполните email в профиле или укажите в запросе'
+                })
+
+        else:
+            # ГОСТЬ или НЕАРЕНДАТОР
+            # Проверяем что все обязательные поля заполнены
+            if not data.get('guest_first_name'):
+                raise serializers.ValidationError({
+                    'guest_first_name': 'Имя гостя обязательно для бронирования'
+                })
+            if not data.get('guest_last_name'):
+                raise serializers.ValidationError({
+                    'guest_last_name': 'Фамилия гостя обязательна для бронирования'
+                })
+            if not data.get('guest_email'):
+                raise serializers.ValidationError({
+                    'guest_email': 'Email гостя обязателен для бронирования'
+                })
+
+
         listing = data.get('listing')
         check_in = data.get('check_in_date')
         check_out = data.get('check_out_date')
@@ -229,10 +312,20 @@ class BookingCreateSerializer(serializers.ModelSerializer):
 
         return data
 
+    def create(self, validated_data):
+        """Создание бронирования с учетом типа пользователя"""
+        request = self.context['request']
+        is_lessee = IsLessee().has_permission(request, None)
+
+        if is_lessee:
+            validated_data['lessee'] = request.user
+        else:
+            validated_data['lessee'] = None
+        return super().create(validated_data)
+
 
 class BookingUpdateSerializer(serializers.ModelSerializer):
     """Сериализатор для обновления бронирования"""
-
     class Meta:
         model = Booking
         fields = [
@@ -245,7 +338,6 @@ class BookingUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         booking = self.instance
-
         # Проверяем, можно ли редактировать
         if booking.status not in [BookingStatus.PENDING.value, BookingStatus.CONFIRMED.value]:
             raise serializers.ValidationError(

@@ -5,53 +5,31 @@ from datetime import timedelta
 
 
 class IsLessor(permissions.BasePermission):
-    """Только арендодатели (lessor)"""
-
     def has_permission(self, request, view):
-        # Проверяем что пользователь авторизован и его роль lessor
         return request.user.is_authenticated and getattr(request.user, 'role', None) == 'lessor'
 
 
 class IsLessee(permissions.BasePermission):
-    """Только арендаторы (lessee)"""
-
-    def has_permission(self, request, view):
-        # Проверяем что пользователь авторизован и его роль lessee
+   def has_permission(self, request, view):
         return request.user.is_authenticated and getattr(request.user, 'role', None) == 'lessee'
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
-    """
-    Универсальный пермишен: чтение всем, запись - только владельцу.
-    Дополнительно проверяет что владелец объявления - lessor.
-    """
-
     def has_object_permission(self, request, view, obj):
-        # Разрешаем чтение всем
         if request.method in permissions.SAFE_METHODS:
             return True
-
-        # Для НЕ-SAFE методов (POST, PUT, PATCH, DELETE):
-
-        # Определяем владельца в зависимости от типа объекта
         owner = None
 
         if hasattr(obj, 'lessee'):
-            # Для Booking: владелец - lessee (арендатор)
             owner = obj.lessee
         elif hasattr(obj, 'reviewer'):
-            # Для Review: владелец - reviewer (автор отзыва)
             owner = obj.reviewer
         elif hasattr(obj, 'lessor'):
-            # Для Listing: владелец - lessor (арендодатель)
             owner = obj.lessor
-            # Дополнительная проверка: для объявлений владелец должен быть lessor
             if owner and getattr(owner, 'role', None) != 'lessor':
                 return False
         elif hasattr(obj, 'listing') and hasattr(obj.listing, 'lessor'):
-            # Для Calendar и других связанных с листингом: владелец листинга
             owner = obj.listing.lessor
-            # Тоже проверяем что владелец - lessor
             if owner and getattr(owner, 'role', None) != 'lessor':
                 return False
 
@@ -60,10 +38,7 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
 
 class IsOwner(permissions.BasePermission):
-    """Строгий пермишен: только владелец (без прав на чтение)"""
-
     def has_object_permission(self, request, view, obj):
-        # Для всех запросов проверяем владельца
         owner = None
 
         if hasattr(obj, 'lessee'):
@@ -80,7 +55,6 @@ class IsOwner(permissions.BasePermission):
 
 class CanCancelBooking(permissions.BasePermission):
     """Специальный пермишен для отмены бронирования с проверкой условий"""
-
     def has_object_permission(self, request, view, obj):
         # 1. Только lessee (арендатор)
         if obj.lessee != request.user:

@@ -79,16 +79,17 @@ class Status(StrEnum):
     @classmethod
     def choices(cls):
         human_readable = {
-            cls.DRAFT: "Черновик",
-            cls.PUBLISHED: "Опубликовано",
-            cls.ARCHIVED: "В архиве",
-            cls.RENTED: "Сдано",
+            cls.DRAFT: "draft",
+            cls.PUBLISHED: "published",
+            cls.ARCHIVED: "archived",
+            cls.RENTED: "rented",
         }
         return [(item.value, human_readable[item]) for item in cls]
 
 class BookingStatus(StrEnum):
     PENDING = 'pending'
     CONFIRMED = 'confirmed'
+    ACTIVE = 'active'
     CANCELLED = 'cancelled'
     COMPLETED = 'completed'
     REJECTED = 'rejected'
@@ -96,10 +97,11 @@ class BookingStatus(StrEnum):
     @classmethod
     def choices(cls):
         human_readable = {
-            cls.PENDING: 'ожидает подтверждения',
-            cls.CONFIRMED : 'confirmed',
-            cls.CANCELLED : 'cancelled',
+            cls.PENDING: 'pending (wait)',
+            cls.CONFIRMED : 'confirmed by lessor',
+            cls.ACTIVE : 'active',
+            cls.CANCELLED : 'cancelled by lessee',
             cls.COMPLETED : 'completed',
-            cls.REJECTED : 'rejected',
+            cls.REJECTED : 'rejected by lessor',
         }
         return [(item.value, human_readable[item]) for item in cls]

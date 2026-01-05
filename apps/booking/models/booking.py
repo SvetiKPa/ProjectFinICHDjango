@@ -1,6 +1,6 @@
 import uuid
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.forms import BooleanField
 from apps.booking.enums import BookingStatus
@@ -18,7 +18,9 @@ class Booking(models.Model):
     )
     lessee = models.ForeignKey(
         'User',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='bookings',
         verbose_name="Арендатор"
     )
@@ -28,7 +30,7 @@ class Booking(models.Model):
 
     number_of_guests = models.PositiveIntegerField(
         default=1,
-        validators=[MinValueValidator(1)],
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
         verbose_name="Количество гостей"
     )
 
@@ -36,9 +38,8 @@ class Booking(models.Model):
         max_digits=10,
         decimal_places=2,
         verbose_name="Цена за ночь",
-        null=False,  # обязательное поле!
-        blank=False,
-        validators=[MinValueValidator(0)]
+        null=True,
+        blank=True
     )
 
     total_nights = models.PositiveIntegerField(
@@ -50,7 +51,6 @@ class Booking(models.Model):
         max_digits=10,
         decimal_places=2,
         verbose_name="Общая сумма",
-        validators=[MinValueValidator(0)],
         editable=False
     )
 
@@ -144,20 +144,78 @@ class Booking(models.Model):
     def __str__(self):
         return f"Бронирование #{self.booking_code} - {self.listing.title}"
 
+    def clean(self):
+        """Валидация данных"""
+        from django.core.exceptions import ValidationError
+
+        # Проверка что листинг существует
+        if not self.listing:
+            raise ValidationError({'listing': 'Необходимо указать объявление'})
+
+        # Проверка дат
+        if self.check_in_date and self.check_out_date:
+            if self.check_out_date <= self.check_in_date:
+                raise ValidationError({
+                    'check_out_date': 'Дата выезда должна быть позже даты заезда'
+                })
+
+            # Рассчитываем ночи для проверки
+            nights = (self.check_out_date - self.check_in_date).days
+
+            # Проверка минимального срока
+            if self.listing.min_stay_days and nights < self.listing.min_stay_days:
+                raise ValidationError({
+                    'check_out_date': f'Минимальный срок проживания: {self.listing.min_stay_days} дней'
+                })
+
+            # Проверка максимального срока
+            if self.listing.max_stay_days and nights > self.listing.max_stay_days:
+                raise ValidationError({
+                    'check_out_date': f'Максимальный срок проживания: {self.listing.max_stay_days} дней'
+                })
+
+        # Проверка количества гостей
+        if self.listing and self.number_of_guests > self.listing.max_guests:
+            raise ValidationError({
+                'number_of_guests': f'Максимальное количество гостей: {self.listing.max_guests}'
+            })
+
+        # Проверка что цена положительная
+        if self.price and self.price <= 0:
+            raise ValidationError({
+                'price': 'Цена должна быть положительным числом'
+            })
+
     def save(self, *args, **kwargs):
-        # Генерация кода бронирования при создании
+        """Сохранение с расчетами"""
+        # Генерация кода бронирования
         if not self.booking_code:
             self.booking_code = str(uuid.uuid4())
 
-        # Рассчитываем количество ночей
+        # Установка цены из листинга
+        if self.listing and (not self.price or self.price <= 0):
+            self.price = self.listing.price
+
+        # Расчет количества ночей
         if self.check_in_date and self.check_out_date:
             self.total_nights = (self.check_out_date - self.check_in_date).days
 
-        # Рассчитываем общую сумму
+        # Расчет общей суммы
         if self.total_nights and self.price:
             self.total_amount = self.price * self.total_nights
 
-        # Автоматически заполняем даты статусов
+        # Автозаполнение данных гостя
+        if self.lessee:
+            if not self.guest_email:
+                self.guest_email = self.lessee.email
+            if not self.guest_phone and hasattr(self.lessee, 'phone'):
+                self.guest_phone = self.lessee.phone
+            if not self.guest_first_name:
+                self.guest_first_name = self.lessee.first_name or ''
+            if not self.guest_last_name:
+                self.guest_last_name = self.lessee.last_name or ''
+
+        # Даты статусов
         if self.status == BookingStatus.CONFIRMED.value and not self.confirmed_at:
             self.confirmed_at = timezone.now()
         elif self.status == BookingStatus.CANCELLED.value and not self.cancelled_at:
@@ -165,15 +223,8 @@ class Booking(models.Model):
         elif self.status == BookingStatus.COMPLETED.value and not self.completed_at:
             self.completed_at = timezone.now()
 
-        # Автоматическое заполнение данных гостя из профиля пользователя
-        if not self.guest_email and self.lessee.email:
-            self.guest_email = self.lessee.email
-        if not self.guest_phone and self.lessee.phone:
-            self.guest_phone = self.lessee.phone
-        if not self.guest_first_name and self.lessee.first_name:
-            self.guest_first_name = self.lessee.first_name
-        if not self.guest_last_name and self.lessee.last_name:
-            self.guest_last_name = self.lessee.last_name
+        # Валидация перед сохранением
+        self.full_clean()
 
         super().save(*args, **kwargs)
 
@@ -196,24 +247,6 @@ class Booking(models.Model):
         cancellation_deadline = self.check_in_date - timedelta(days=2)
         return timezone.now().date() < cancellation_deadline
 
-    @property
-    def nights_remaining(self):
-        """Сколько ночей осталось до заезда"""
-        if self.check_in_date:
-            days = (self.check_in_date - timezone.now().date()).days
-            return max(days, 0)
-        return 0
-
-    @property
-    def current_stay_progress(self):
-        """Прогресс текущего проживания (0-100%)"""
-        if self.status != BookingStatus.ACTIVE.value:
-            return 0
-
-        total_days = (self.check_out_date - self.check_in_date).days
-        days_passed = (timezone.now().date() - self.check_in_date).days
-        return min(int((days_passed / total_days) * 100), 100)
-
     def mark_as_confirmed(self, confirmed_by=None):
         """Подтвердить бронирование"""
         self.status = BookingStatus.CONFIRMED.value
@@ -233,40 +266,4 @@ class Booking(models.Model):
         self.status = BookingStatus.COMPLETED.value
         self.completed_at = timezone.now()
         self.save()
-
-    def get_price_breakdown(self):
-        """Детализация стоимости"""
-        base_price = self.price * self.total_nights
-        return {
-            'nights': self.total_nights,
-            'price_per_night': float(self.price),
-            'base_price': float(base_price),
-            'cleaning_fee': float(self.cleaning_fee),
-            'service_fee': float(self.service_fee),
-            'deposit': float(self.deposit_amount),
-            'total': float(self.total_amount),
-        }
-
-    def clean(self):
-        """Валидация перед сохранением"""
-        from django.core.exceptions import ValidationError
-
-        # Проверка дат
-        if self.check_in_date and self.check_out_date:
-            if self.check_out_date <= self.check_in_date:
-                raise ValidationError({
-                    'check_out_date': 'Дата выезда должна быть позже даты заезда'
-                })
-
-            # Проверка минимального срока проживания
-            if self.listing and self.total_nights < self.listing.min_stay_days:
-                raise ValidationError({
-                    'check_out_date': f'Минимальный срок проживания: {self.listing.min_stay_days} дней'
-                })
-
-        # Проверка количества гостей
-        if self.listing and self.number_of_guests > self.listing.max_guests:
-            raise ValidationError({
-                'number_of_guests': f'Максимальное количество гостей: {self.listing.max_guests}'
-            })
 

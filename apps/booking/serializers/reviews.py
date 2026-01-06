@@ -4,10 +4,9 @@ from apps.booking.enums import BookingStatus
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    """Простой сериализатор для отзывов"""
-
     reviewer_name = serializers.CharField(source='reviewer.username', read_only=True)
     listing_title = serializers.CharField(source='listing.title', read_only=True)
+    listing_address = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Review
@@ -15,6 +14,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             'id',
             'listing',
             'listing_title',
+            'listing_address',
             'booking',
             'reviewer',
             'reviewer_name',
@@ -23,6 +23,18 @@ class ReviewSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['reviewer', 'listing', 'created_at']
+
+    def get_listing_address(self, obj):
+        if obj.listing and hasattr(obj.listing, 'address'):
+            address = obj.listing.address
+            if address:
+                parts = []
+                if hasattr(address, 'address') and address.address:
+                    parts.append(address.address)
+                if hasattr(address, 'city') and address.city:
+                    parts.append(address.city)
+                return ", ".join(parts)
+        return "Адрес не указан"
 
 
 class CreateReviewSerializer(serializers.ModelSerializer):
@@ -36,11 +48,9 @@ class CreateReviewSerializer(serializers.ModelSerializer):
         booking = data['booking']
         user = self.context['request'].user
 
-        # 1. Только арендатор может оставить отзыв
         if booking.lessee != user:
             raise serializers.ValidationError("Вы не арендатор этого бронирования")
 
-        # 2. Только завершенное бронирование
         if booking.status != BookingStatus.COMPLETED.value:
             raise serializers.ValidationError("Отзыв можно оставить только после завершенного бронирования")
 
@@ -48,7 +58,6 @@ class CreateReviewSerializer(serializers.ModelSerializer):
         if Review.objects.filter(booking=booking).exists():
             raise serializers.ValidationError("На это бронирование уже есть отзыв")
 
-        # Автоматически заполняем listing из бронирования
         data['listing'] = booking.listing
         data['reviewer'] = user
 

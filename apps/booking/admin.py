@@ -33,7 +33,8 @@ class BookingAdmin(admin.ModelAdmin):
                     'guest_last_name',
                     'listing_id',
                     'lessee_id',
-                    'status'
+                    'status',
+                    'id'
                     ]
     # list_filter = ['check_out_date']
 

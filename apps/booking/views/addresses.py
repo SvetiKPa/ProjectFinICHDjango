@@ -32,15 +32,12 @@ class AddressViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
 
-        # Фильтрация по городу через query params
         city_filter = self.request.query_params.get('city')
         if city_filter:
             queryset = queryset.filter(city__iexact=city_filter)
 
-        # Фильтрация по стране
         country_filter = self.request.query_params.get('country')
         if country_filter:
             queryset = queryset.filter(country__iexact=country_filter)
 
-        # Сортировка по умолчанию
         return queryset.order_by('city', 'address')

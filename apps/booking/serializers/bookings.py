@@ -5,7 +5,6 @@ from django.utils import timezone
 from datetime import timedelta
 from apps.booking.permissions import IsLessee
 from apps.booking.availability import AvailabilityService
-# from apps.booking.serializers import CalendarSerializer
 
 
 class BookingSerializer(serializers.ModelSerializer):
@@ -28,7 +27,6 @@ class BookingSerializer(serializers.ModelSerializer):
     lessor_name = serializers.CharField(source='listing.lessor.get_full_name', read_only=True)
 
     # Поля календаря
-    # calendar_entries = CalendarSerializer(many=True, read_only=True, source='calendar_days')
     calendar_dates = serializers.SerializerMethodField(read_only=True)
 
     def get_calendar_dates(self, obj):
@@ -43,8 +41,8 @@ class BookingSerializer(serializers.ModelSerializer):
             address = obj.listing.address
             if address:
                 parts = []
-                if hasattr(address, 'street') and address.street:
-                    parts.append(address.street)
+                if hasattr(address, 'address') and address.address:
+                    parts.append(address.address)
                 if hasattr(address, 'city') and address.city:
                     parts.append(address.city)
                 return ", ".join(parts)

@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.booking.models import Review
 from apps.booking.serializers import ReviewSerializer, CreateReviewSerializer
@@ -9,8 +10,18 @@ from apps.booking.permissions import IsOwner
 
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = Review.objects.all()
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['listing']
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['listing', 'rating']
+    ordering_fields = ['created_at', 'rating', 'updated_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        queryset = Review.objects.all()
+        if self.action in ['update', 'partial_update', 'destroy', 'retrieve']:
+            if self.request.user.is_authenticated:
+                return queryset.filter(reviewer=self.request.user)
+            return Review.objects.none()
+        return queryset
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -18,7 +29,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         return ReviewSerializer
 
     def get_permissions(self):
-        if self.action in ['create', 'my_reviews']:
+        if self.action in ['create', 'my']:
             return [permissions.IsAuthenticated()]
         elif self.action in ['update', 'partial_update', 'destroy']:
             return [permissions.IsAuthenticated(), IsOwner()]
@@ -27,9 +38,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(reviewer=self.request.user)
 
-    @action(detail=False, methods=['get'], url_path='my', url_name='my-reviews')
+    @action(detail=False, methods=['get'])
     def my(self, request):
         """Мои отзывы"""
         reviews = Review.objects.filter(reviewer=request.user)
+        listing_id = request.query_params.get('listing')
+        if listing_id:
+            reviews = reviews.filter(listing_id=listing_id)
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)

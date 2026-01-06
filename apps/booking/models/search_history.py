@@ -7,7 +7,7 @@ class SearchHistory(models.Model):
         related_name='search_history',
         verbose_name="Пользователь",
         null=True,
-        blank=True  # Для неаутентифицированных пользователей
+        blank=True
     )
     query = models.CharField(max_length=255, verbose_name="Поисковый запрос")
     filters = models.JSONField(

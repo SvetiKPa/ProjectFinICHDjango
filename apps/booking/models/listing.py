@@ -132,7 +132,7 @@ class Listing(models.Model):
     @property
     def full_address(self):
         if self.address:
-            return f"{self.address.city}, {self.address.street}"
+            return f"{self.address.address}, {self.address.address}"
         return "Адрес не указан"
 
     @property

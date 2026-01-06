@@ -4,6 +4,7 @@ from apps.booking.enums import BookingStatus
 from django.utils import timezone
 from datetime import timedelta
 from apps.booking.permissions import IsLessee
+from apps.booking.availability import AvailabilityService
 # from apps.booking.serializers import CalendarSerializer
 
 
@@ -251,20 +252,12 @@ class BookingCreateSerializer(serializers.ModelSerializer):
             })
 
         # # Проверяем доступность через календарь
-        # is_available = CalendarService.check_date_range_availability(
-        #     listing=listing,
-        #     start_date=check_in,
-        #     end_date=check_out
-        # )
-        #
-        # if not is_available:
-        #     raise serializers.ValidationError({
-        #         'check_in_date': 'Выбранные даты недоступны для бронирования'
-        #     })
-        if not data['listing'].is_available:
-            raise serializers.ValidationError({
-                "listing": "Объявление недоступно для бронирования"
-            })
+        is_available, message = AvailabilityService.check_availability(
+            listing, check_in, check_out
+        )
+
+        if not is_available:
+            raise serializers.ValidationError({"dates": message})
 
         # Есть ли пересечения с другими бронированиями?
         conflicting = Booking.objects.filter(
@@ -315,13 +308,24 @@ class BookingCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Создание бронирования с учетом типа пользователя"""
         request = self.context['request']
+
         is_lessee = IsLessee().has_permission(request, None)
 
         if is_lessee:
             validated_data['lessee'] = request.user
         else:
             validated_data['lessee'] = None
-        return super().create(validated_data)
+        booking = super().create(validated_data)
+
+        # Блокируем даты в календаре
+        AvailabilityService.block_dates(
+            listing=booking.listing,
+            check_in_date=booking.check_in_date,
+            check_out_date=booking.check_out_date,
+            booking=booking
+        )
+
+        return booking
 
 
 class BookingUpdateSerializer(serializers.ModelSerializer):
@@ -369,11 +373,11 @@ class CancelBookingSerializer(serializers.Serializer):
         return data
 
 
-class ConfirmBookingSerializer(serializers.Serializer):
-    """Сериализатор для подтверждения/отклонения бронирования владельцем"""
-
-    action = serializers.ChoiceField(choices=['confirm', 'reject'])
-    reason = serializers.CharField(required=False, max_length=500, allow_blank=True)
+# class ConfirmBookingSerializer(serializers.Serializer):
+#     """Сериализатор для подтверждения/отклонения бронирования владельцем"""
+#
+#     action = serializers.ChoiceField(choices=['confirm', 'reject'])
+#     reason = serializers.CharField(required=False, max_length=500, allow_blank=True)
 
 
 class BookingListSerializer(serializers.ModelSerializer):

@@ -31,5 +31,9 @@ class BookingAdmin(admin.ModelAdmin):
                     'booking_code',
                     'guest_first_name',
                     'guest_last_name',
+                    'listing_id',
+                    'lessee_id',
+                    'status'
                     ]
+    # list_filter = ['check_out_date']
 

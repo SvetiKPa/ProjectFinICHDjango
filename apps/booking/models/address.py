@@ -15,7 +15,7 @@ class Address(models.Model):
     country = models.CharField(
         max_length=100,
         verbose_name="Страна",
-        default='Германия'
+        default='Germany'
     )
     postal_code = models.CharField(max_length=10, verbose_name="Почтовый индекс")
     latitude = models.DecimalField(
@@ -32,6 +32,10 @@ class Address(models.Model):
         blank=True,
         verbose_name="Долгота"
     )
+    class Meta:
+        db_table = "address"
+        ordering = ['country']
+
 
     def __str__(self):
         return f"{self.country}, {self.city}, {self.address}, {self.latitude}, {self.longitude},"

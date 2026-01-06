@@ -123,23 +123,6 @@ class Booking(models.Model):
         verbose_name_plural = "Бронирования"
         ordering = ['-created_at']
 
-        constraints = [
-            models.UniqueConstraint(
-                fields=['listing', 'check_in_date', 'check_out_date', 'status'],
-                condition=models.Q(status__in=['pending', 'confirmed', 'active']),
-                name='unique_booking_dates'
-            ),
-            # Проверка дат
-            models.CheckConstraint(
-                condition=models.Q(check_out_date__gt=models.F('check_in_date')),
-                name='check_out_after_check_in'
-            ),
-            # Проверка гостей
-            models.CheckConstraint(
-                condition=models.Q(number_of_guests__gte=1),
-                name='at_least_one_guest'
-            ),
-        ]
 
     def __str__(self):
         return f"Бронирование #{self.booking_code} - {self.listing.title}"

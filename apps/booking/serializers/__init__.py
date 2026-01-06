@@ -7,7 +7,7 @@ __all__ = [
     'BookingSerializer',
     'BookingUpdateSerializer',
     'CancelBookingSerializer',
-    'ConfirmBookingSerializer',
+    # 'ConfirmBookingSerializer',
     'BookingListSerializer',
     'UserListSerializer',
     'UserDetailSerializer',
@@ -19,8 +19,11 @@ __all__ = [
 
 from .listings import ListingSerializer, ListingDetailedSerializer, ListingUpdateSerializer
 from .addresses import AddressSerializer, AddressDetailSerializer
-from .bookings import (BookingSerializer, BookingCreateSerializer, BookingUpdateSerializer, CancelBookingSerializer,
-                       ConfirmBookingSerializer, BookingListSerializer)
+from .bookings import (BookingSerializer, BookingCreateSerializer,
+                       BookingUpdateSerializer,
+                       BookingListSerializer,
+                       # ConfirmBookingSerializer,
+                       CancelBookingSerializer)
 from .users import UserListSerializer, UserDetailSerializer, UserCreateSerializer
 from .reviews import CreateReviewSerializer, ReviewSerializer
 from .calendars import CalendarAvailabilityCheckSerializer

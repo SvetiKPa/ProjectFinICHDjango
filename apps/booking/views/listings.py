@@ -98,7 +98,6 @@ class ListingViewSet(ModelViewSet):
         return self._apply_filters(queryset)
 
     def _apply_filters(self, queryset):
-        # Получаем параметры запроса
         params = self.request.query_params
         user = self.request.user
         # Диапазон комнат
@@ -116,6 +115,13 @@ class ListingViewSet(ModelViewSet):
             queryset = queryset.filter(price__gte=float(min_price))
         if max_price:
             queryset = queryset.filter(price__lte=float(max_price))
+
+        min_guests = params.get('min_guests')
+        max_guests = params.get('max_guests')
+        if min_guests:
+            queryset = queryset.filter(max_guests__gte=int(min_guests))
+        if max_guests:
+            queryset = queryset.filter(max_guests__lte=int(max_guests))
 
         # Город
         city = params.get('city')
